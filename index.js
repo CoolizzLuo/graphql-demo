@@ -7,6 +7,12 @@ const users = [
   { id: 3, name: 'Mary', age: 18, friendIds: [1], height: 181, weight: 77.0 }
 ];
 
+const posts = [
+  { id: 1, authorId: 1, title: "Hello World!", content: "This is my first post.", likeGiverIds: [2] },
+  { id: 2, authorId: 2, title: "Good Night", content: "Have a Nice Dream =)", likeGiverIds: [2, 3] },
+  { id: 3, authorId: 1, title: "I Love U", content: "Here's my second post!", likeGiverIds: [] },
+];
+
 // The GraphQL schema
 // 2. 在 Schema 添加新 fields
 const typeDefs = gql`
@@ -51,6 +57,23 @@ const typeDefs = gql`
     height(unit: HeightUnit = CENTIMETRE): Float
     "體重 (預設為 KILOGRAM)"
     weight(unit: WeightUnit = KILOGRAM): Float
+    posts: [Post]
+  }
+
+  """
+  貼文
+  """
+  type Post {
+    "識別碼"
+    id: ID!
+    "作者"
+    author: User
+    "標題"
+    title: String
+    "內容"
+    content: String
+    "按讚者"
+    likeGivers: [User]
   }
 
   type Query {
@@ -63,9 +86,30 @@ const typeDefs = gql`
     "取得特定 user (name 為必填)"
     user(name: String!): User
   }
+
+  input AddPostInput {
+    title: String!
+    content: String
+  }
+
+  # Mutation 定義
+  type Mutation {
+    "新增貼文"
+    addPost(input: AddPostInput): Post
+    "貼文按讚 (收回讚)"
+    likePost(postId: ID!): Post
+  }
 `;
 
-// A map of functions which return data for the schema.
+// Helper Functions
+const findUserById = id => users.find(user => user.id === id);
+const findUserByName = name => users.find(user => user.name === name);
+const filterPostsByAuthorId = authorId => posts.filter(post => post.authorId === authorId);
+const meId = 1;
+const findPostById = id => posts.find(post => post.id === id);
+
+// 1. 新增 User.posts field Resovler
+// 2. 新增 Post Type Resolver 及底下的 field Resolver
 const resolvers = {
   Query: {
     hello: () => 'world',
@@ -77,6 +121,36 @@ const resolvers = {
       const { name } = args;
       return users.find(user => user.name === name);
     }
+  },
+  Mutation: {
+    addPost: (root, args, context) => {
+      const { input } = args;
+      const { title, content } = input;
+      const newPost = {
+        id: posts.length + 1,
+        authorId: meId,
+        title,
+        content,
+        likeGivers: []
+      };
+      posts.push(newPost);
+      return newPost;
+    },
+    likePost: (root, args, context) => {
+      const { postId } = args;
+      const post = findPostById(postId);
+      if (!post) throw new Error(`Post ${psotId} Not Exists`);
+
+      if (post.likeGiverIds.includes(meId)) {
+        // 如果已經按過讚就收回
+        const index = post.likeGiverIds.findIndex(v => v === userId);
+        post.likeGiverIds.splice(index, 1);
+      } else {
+        // 否則就加入 likeGiverIds 名單
+        post.likeGiverIds.push(meId);
+      }
+      return post;
+    },
   },
   // 3-2 新增 `User` 並包含 `friends` 的 field resolver
   User: {
@@ -105,6 +179,20 @@ const resolvers = {
       else if (unit === "GRAM") return parent.weight * 100;
       else if (unit === "POUND") return parent.weight / 0.45359237;
       throw new Error(`Weight unit "${unit}" not supported.`);
+    },
+    posts: (parent, args, context) => {
+      // parent.id 為 userId
+      return filterPostsByAuthorId(parent.id);
+    }
+  },
+  Post: {
+    // 2-1. parent 為 post 的資料，透過 post.likeGiverIds 連接到 users
+    likeGivers: (parent, args, context) => {
+      return parent.likeGiverIds.map(id => findUserById(id));
+    },
+    // 2-2. parent 為 post 的資料，透過 post.author
+    author: (parent, args, context) => {
+      return findUserById(parent.authorId);
     }
   }
 };
@@ -115,5 +203,5 @@ const server = new ApolloServer({
 });
 
 server.listen().then(({ url }) => {
-  console.log(`? Server ready at ${url}`);
+  console.log(`Server ready at ${url}`);
 });
