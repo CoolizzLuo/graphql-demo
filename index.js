@@ -1,13 +1,10 @@
-const { ApolloServer, gql } = require('apollo-server');
+require('dotenv').config()
+const { ApolloServer, gql, ForbiddenError } = require('apollo-server');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-// 定義 bcrypt 加密所需 saltRounds 次數
-const SALT_ROUNDS = 2;
-// 定義 jwt 所需 secret (可隨便打)
-const SECRET = 'just_a_random_secret';
+const SALT_ROUNDS = Number(process.env.SALT_ROUNDS)
+const SECRET = process.env.SECRET
 
-
-const meId = 1;
 const users = [
   {
     id: 1,
@@ -53,6 +50,13 @@ const posts = [
     createdAt: '2018-10-24T01:40:14.941Z'
   }
 ];
+
+
+const isAuthenticated = resolverFunc => (parent, args, context) => {
+  if (!context.me) throw new ForbiddenError('Not logged in.');
+  return resolverFunc.apply(null, [parent, args, context]);
+};
+
 
 const typeDefs = gql`
   type Query {
@@ -125,7 +129,7 @@ const typeDefs = gql`
     addFriend(userId: ID!): User
     addPost(input: AddPostInput!): Post
     likePost(postId: ID!): Post
-    "註冊。 email 與 passwrod 必填"
+    deletePost(postId: ID!): Post
     signUp(name: String, email: String!, password: String!): User
     login (email: String!, password: String!): Token
   }
@@ -149,7 +153,15 @@ const addPost = ({ authorId, title, body }) => {
   };
 };
 const updatePost = (postId, data) => Object.assign(findPostByPostId(postId), data);
-const hash = text => bcrypt.hash(text, SALT_ROUNDS);
+const deletePost = (postId) => posts.splice(posts.findIndex(post => post.id === postId), 1)[0];
+const isPostAuthor = resolverFunc => (parent, args, context) => {
+  const { postId } = args;
+  const { me } = context;
+  const isAuthor = findPostByPostId(postId).authorId === me.id;
+  if (!isAuthor) throw new ForbiddenError('Only Author Can Delete this Post');
+  return resolverFunc.applyFunc(parent, args, context);
+}
+const hash = (text, saltRounds) => bcrypt.hash(text, saltRounds)
 const addUser = ({ name, email, password }) => (
   users[users.length] = {
     id: users[users.length - 1].id + 1,
@@ -158,17 +170,16 @@ const addUser = ({ name, email, password }) => (
     password
   }
 );
-const createToken = ({ id, email, name }) => jwt.sign({ id, email, name }, SECRET, {
+const createToken = ({ id, email, name }, secret) => jwt.sign({ id, email, name }, secret, {
   expiresIn: '1d'
 });
 
 const resolvers = {
   Query: {
     hello: () => "world",
-    me: (root, args, { me }) => {
-      if (!me) throw new Error('Plz Log In First');
+    me: isAuthenticated((root, args, { me }) => {
       return findUserByUserId(me.id)
-    },
+    }),
     users: () => users,
     user: (root, { name }, context) => findUserByName(name),
     posts: () => posts,
@@ -183,15 +194,16 @@ const resolvers = {
     likeGivers: (parent, args, context) => filterUsersByUserIds(parent.likeGiverIds)
   },
   Mutation: {
-    updateMyInfo: (parent, { input }, context) => {
+    updateMyInfo: isAuthenticated((parent, { input }, { me }) => {
       // 過濾空值
       const data = ["name", "age"].reduce(
         (obj, key) => (input[key] ? { ...obj, [key]: input[key] } : obj),
         {}
       );
-      return updateUserInfo(meId, data);
-    },
-    addFriend: (parent, { userId }, context) => {
+
+      return updateUserInfo(me.id, data);
+    }),
+    addFriend: isAuthenticated((parent, { userId }, { me: { id: meId } }) => {
       const me = findUserByUserId(meId);
       if (me.friendIds.include(userId))
         throw new Error(`User ${userId} Already Friend.`);
@@ -203,47 +215,50 @@ const resolvers = {
       updateUserInfo(userId, { friendIds: friend.friendIds.concat(meId) });
 
       return newMe;
-    },
-    addPost: (parent, { input }, context) => {
+    }),
+    addPost: isAuthenticated((parent, { input }, { me }) => {
       const { title, body } = input;
-      return addPost({ authorId: meId, title, body });
-    },
-    likePost: (parent, { postId }, context) => {
+      return addPost({ authorId: me.id, title, body });
+    }),
+    likePost: isAuthenticated((parent, { postId }, { me }) => {
+
       const post = findPostByPostId(postId);
 
       if (!post) throw new Error(`Post ${postId} Not Exists`);
 
       if (!post.likeGiverIds.includes(postId)) {
         return updatePost(postId, {
-          likeGiverIds: post.likeGiverIds.concat(meId)
+          likeGiverIds: post.likeGiverIds.concat(me.id)
         });
       }
-
       return updatePost(postId, {
-        likeGiverIds: post.likeGiverIds.filter(id => id === meId)
+        likeGiverIds: post.likeGiverIds.filter(id => id === me.id)
       });
-    },
-    signUp: async (root, { name, email, password }, context) => {
+    }),
+    deletePost: isAuthenticated(
+      isPostAuthor((root, { postId }, { me }) => deletePost(postId))
+    ),
+    signUp: async (root, { name, email, password }, { saltRounds }) => {
       // 1. 檢查不能有重複註冊 email
       const isUserEmailDuplicate = users.some(user => user.email === email);
       if (isUserEmailDuplicate) throw new Error('User Email Duplicate');
 
       // 2. 將 passwrod 加密再存進去。非常重要 !!
-      const hashedPassword = await hash(password, SALT_ROUNDS);
+      const hashedPassword = await hash(password, saltRounds)
       // 3. 建立新 user
       return addUser({ name, email, password: hashedPassword });
     },
-    login: async (root, { email, password }, context) => {
+    login: async (root, { email, password }, { saltRounds }) => {
       // 1. 透過 email 找到相對應的 user
       const user = users.find(user => user.email === email);
       if (!user) throw new Error('Email Account Not Exists');
 
       // 2. 將傳進來的 password 與資料庫存的 user.password 做比對
-      const passwordIsValid = await bcrypt.compare(password, user.password);
+      const passwordIsValid = await bcrypt.compare(password, user.password)
       if (!passwordIsValid) throw new Error('Wrong Password');
 
       // 3. 成功則回傳 token
-      return { token: await createToken(user) };
+      return { token: await createToken(user, secret) }
     }
   }
 };
@@ -252,20 +267,17 @@ const server = new ApolloServer({
   typeDefs,
   resolvers,
   context: async ({ req }) => {
-    // 1. 取出
+    const context = { secret: SECRET, saltRounds: SALT_ROUNDS };
     const token = req.headers['x-token'];
     if (token) {
       try {
-        // 2. 檢查 token + 取得解析出的資料
         const me = await jwt.verify(token, SECRET);
-        // 3. 放進 context
-        return { me };
+        return { ...context, me }
       } catch (e) {
         throw new Error('Your session expired. Sign in again.');
       }
     }
-    // 如果沒有 token 就回傳空的 context 出去
-    return {};
+    return context;
   }
 });
 
