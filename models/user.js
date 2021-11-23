@@ -16,22 +16,23 @@ const users = [
     email: 'nwfw@test.com',
     password: '$2b$04$UmERaT7uP4hRqmlheiRHbOwGEhskNw05GHYucU73JRf8LgWaqWpTy', // 123456
     name: '下班不要看',
-    age: 18,
+  },
+  {
+    id: 4,
+    email: 'boys@test.com',
+    password: '$2b$04$UmERaT7uP4hRqmlheiRHbOwGEhskNw05GHYucU73JRf8LgWaqWpTy', // 123456
+    name: '正骨男孩',
+  },
+  {
+    id: 5,
+    email: 'badman@test.com',
+    password: '$2b$04$UmERaT7uP4hRqmlheiRHbOwGEhskNw05GHYucU73JRf8LgWaqWpTy', // 123456
+    name: '小育',
   }
 ];
 
 module.exports = {
   getAllUsers: () => users,
-  findUserByUserId: userId => users.find(user => user.id === Number(userId)),
-  filterUsersByUserIds: userIds => users.filter(user => userIds.includes(user.id)),
-  findUserByName: name => users.find(user => user.name === name),
-  updateUserInfo: (userId, data) => Object.assign(findUserByUserId(userId), data),
-  addUser: ({ name, email, password }) => (
-    users[users.length] = {
-      id: users[users.length - 1].id + 1,
-      name,
-      email,
-      password
-    }
-  )
+  findUserById: id => users.find(user => user.id === Number(id)),
+  findUserByName: name => users.find(user => user.name === name)
 }

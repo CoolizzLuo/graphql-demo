@@ -1,7 +1,9 @@
 const userModel = require('./user')
-const postModel = require('./post')
+const taskModel = require('./task')
+const staffModel = require('./staff')
 
 module.exports = {
   userModel,
-  postModel
+  taskModel,
+  staffModel
 }

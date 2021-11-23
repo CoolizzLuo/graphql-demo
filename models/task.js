@@ -1,10 +1,10 @@
-const task = [
+const tasks = [
   {
     id: 1,
     authorId: 4,
     title: 'Hello World',
     content: 'This is my first post',
-    likeGiverIds: [1, 2],
+    userIds: [1, 2],
     createdAt: '2021-11-22T01:40:14.941Z'
   },
   {
@@ -12,15 +12,16 @@ const task = [
     authorId: 2,
     title: 'Nice Day',
     content: 'Hello My Friend!',
-    likeGiverIds: [1],
+    userIds: [1],
     createdAt: '2021-11-23T01:40:14.941Z'
   }
 ];
 
 module.exports = {
-  getAllPosts: () => posts,
-  filterPostsByUserId: userId => posts.filter(post => userId === post.authorId),
-  findPostByPostId: postId => posts.find(post => post.id === Number(postId)),
+  getAllTask: () => tasks,
+  findTaskById: id => tasks.find(task => task.id === Number(id)),
+  filterTaskByUserId: userId => tasks.filter(task => userId === task.authorId),
+  filterTaskByStaffId: staffId => { },
   addPost: ({ authorId, title, body }) => {
     posts[posts.length] = {
       id: posts[posts.length - 1].id + 1,

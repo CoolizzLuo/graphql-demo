@@ -1,4 +1,4 @@
-const staff = [
+const staffs = [
   {
     id: 1,
     email: 'alex@bitgin.com',
@@ -26,16 +26,7 @@ const staff = [
 ];
 
 module.exports = {
-  findStaffById: userId => users.find(user => user.id === Number(userId)),
-  filterUsersByUserIds: userIds => users.filter(user => userIds.includes(user.id)),
-  findUserByName: name => users.find(user => user.name === name),
-  updateUserInfo: (userId, data) => Object.assign(findUserByUserId(userId), data),
-  addUser: ({ name, email, password }) => (
-    users[users.length] = {
-      id: users[users.length - 1].id + 1,
-      name,
-      email,
-      password
-    }
-  )
+  getAllStaffs: () => staffs,
+  findStaffById: id => staffs.find(staff => staff.id === Number(id)),
+  findStaffByName: name => staffs.find(staff => staff.name === name)
 }
